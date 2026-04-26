@@ -61,6 +61,11 @@
 		"@axnic/pi-extension-settings": "^0.2.0",
 		"@mariozechner/pi-coding-agent": "*"
 	},
+	"peerDependenciesMeta": {
+		"@axnic/pi-extension-settings": {
+			"optional": true
+		}
+	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/hdkiller/pi-langfuse.git"

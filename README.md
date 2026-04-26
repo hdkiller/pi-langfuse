@@ -27,7 +27,10 @@ Langfuse provides open-source observability for LLM applications. This extension
 ### 1. Install via Pi
 
 ```bash
+# Optional: Install settings panel for GUI configuration
 pi install npm:@axnic/pi-extension-settings
+
+# Install Langfuse extension
 pi install npm:@hdkiller/pi-langfuse
 ```
 
@@ -36,7 +39,7 @@ pi install npm:@hdkiller/pi-langfuse
 Get your keys from [Langfuse Cloud](https://cloud.langfuse.com) → Settings → API Keys.
 
 Configuration precedence:
-1.  `/extensions:settings` (highest)
+1.  `/extensions:settings` (highest, requires optional settings extension)
 2.  `config.json`
 3.  `LANGFUSE_*` environment variables (lowest)
 
