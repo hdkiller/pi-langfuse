@@ -1,7 +1,8 @@
-import { beforeEach, describe, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import registerExtension from "./index.js";
 
 type ExtensionArg = Parameters<typeof registerExtension>[0];
+type EventHandler = (event: unknown, ctx?: unknown) => Promise<void> | void;
 
 describe("index (extension entry)", () => {
 	const mockPi = {
@@ -22,9 +23,13 @@ describe("index (extension entry)", () => {
 		await registerExtension(mockPi as unknown as ExtensionArg);
 
 		// Find the session_start handler
-		const sessionStartHandler = mockPi.on.mock.calls.find(
+		const sessionStartCall = mockPi.on.mock.calls.find(
 			(call) => call[0] === "session_start",
-		)[1];
+		);
+		expect(sessionStartCall).toBeDefined();
+		if (!sessionStartCall)
+			throw new Error("session_start handler not registered");
+		const sessionStartHandler = sessionStartCall[1] as EventHandler;
 
 		const mockCtx = {
 			sessionManager: {
@@ -40,9 +45,13 @@ describe("index (extension entry)", () => {
 	it("should update model on model_select", async () => {
 		await registerExtension(mockPi as unknown as ExtensionArg);
 
-		const modelSelectHandler = mockPi.on.mock.calls.find(
+		const modelSelectCall = mockPi.on.mock.calls.find(
 			(call) => call[0] === "model_select",
-		)[1];
+		);
+		expect(modelSelectCall).toBeDefined();
+		if (!modelSelectCall)
+			throw new Error("model_select handler not registered");
+		const modelSelectHandler = modelSelectCall[1] as EventHandler;
 
 		await modelSelectHandler({
 			model: { id: "new-model", provider: "new-provider" },

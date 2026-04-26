@@ -1,10 +1,9 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Config } from "./config.js";
 
 type LangfuseMetadata = Record<string, unknown>;
 
 type TraceUpdateBody = {
+	id?: string | null;
 	name?: string;
 	metadata?: LangfuseMetadata;
 	output?: unknown;
@@ -59,6 +58,7 @@ export interface LangfuseGeneration {
 
 export interface LangfuseClient {
 	trace(body?: {
+		id?: string | null;
 		name: string;
 		metadata?: LangfuseMetadata;
 		input?: unknown;
@@ -133,11 +133,7 @@ export async function getClient(config: Config): Promise<LangfuseClient> {
 	}
 
 	if (!client) {
-		const srcDir = resolve(dirname(fileURLToPath(import.meta.url)));
-		const projectRoot = resolve(srcDir, "..");
-		const lib = (await import(
-			`${projectRoot}/node_modules/langfuse/lib/index.mjs`
-		)) as {
+		const lib = (await import("langfuse")) as {
 			Langfuse: new (options: {
 				publicKey: string;
 				secretKey?: string;

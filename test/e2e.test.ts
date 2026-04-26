@@ -102,6 +102,7 @@ describe.runIf(!skipE2E)("Langfuse E2E Integration", () => {
 		}
 
 		expect(retrievedTrace).toBeDefined();
+		if (!retrievedTrace) throw new Error(`Trace ${testId} was not retrieved`);
 		expect(retrievedTrace.name).toBe("e2e-pi-test");
 		expect(retrievedTrace.id).toBe(testId);
 		expect(retrievedTrace.tags).toContain("env:e2e-test");
@@ -114,6 +115,7 @@ describe.runIf(!skipE2E)("Langfuse E2E Integration", () => {
 			(o) => o.name === "test.generation",
 		);
 		expect(genObs).toBeDefined();
+		if (!genObs) throw new Error("Generation observation was not retrieved");
 		expect(genObs.model).toBe("gpt-3.5-turbo");
 		expect(genObs?.usage?.total).toBe(10);
 	}, 30000); // 30s timeout for E2E
