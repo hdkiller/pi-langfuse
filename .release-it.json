@@ -2,10 +2,13 @@
 	"git": {
 		"pushRepo": "origin",
 		"tagName": "v${version}",
-		"push": true
+		"push": true,
+		"commitMessage": "chore: release v${version}"
 	},
 	"github": {
-		"release": false
+		"release": true,
+		"releaseName": "v${version}",
+		"skipChecks": true
 	},
 	"npm": {
 		"publish": true
@@ -20,7 +23,6 @@
 	},
 	"hooks": {
 		"before:init": ["npm run typecheck", "npm run test"],
-		"after:bump": "npm run build",
-		"after:release": "gh release create v${version} --title \"v${version}\" --notes \"$(cat CHANGELOG.md)\""
+		"after:bump": "npm run build"
 	}
 }
