@@ -12,3 +12,12 @@
 
 * avoid invalid sessionId on scores ([5fe3e6c](https://github.com/hdkiller/pi-langfuse/commit/5fe3e6cff4eaf7fc721f6a0fb92c37ca2344ccf7))
 * update internal imports to .js for Node16 ESM compatibility ([418b949](https://github.com/hdkiller/pi-langfuse/commit/418b9494bd2b9fb11ace9e91d2358211835153d4))
+
+## 0.1.0 (2026-04-26)
+
+### Features
+* **Modernization**: Established strict TypeScript/ESM architecture.
+* **Tooling**: Integrated Biome (linting/formatting), Vitest (testing), and Husky.
+* **CI/CD**: Setup GitHub Actions with E2E integration tests.
+* **Observability**: Major improvements to trace hierarchy and assistant-turn generations.
+
