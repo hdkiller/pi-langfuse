@@ -3,7 +3,16 @@
 	"version": "0.1.0",
 	"description": "Langfuse observability extension for Pi coding agent with prompt/turn/tool tracing, token usage, costs, and session context",
 	"type": "module",
-	"main": "index.ts",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"scripts": {
+		"build": "tsc",
+		"check": "biome check --write .",
+		"format": "biome format --write .",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
 	"keywords": [
 		"pi-package",
 		"langfuse",
@@ -22,10 +31,17 @@
 		"extensions": [
 			"./index.ts"
 		],
-		"image": "https://raw.githubusercontent.com/hdkiller/pi-langfuse/main/screenshot.png"
+		"image": "https://raw.githubusercontent.com/hdkiller/pi-langfuse/main/docs/screenshot.jpg"
 	},
 	"dependencies": {
 		"langfuse": "^3.38.20"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.5",
+		"@types/node": "^20.0.0",
+		"typescript": "^5.9.2",
+		"vitest": "^2.0.0",
+		"tsx": "^4.20.3"
 	},
 	"peerDependencies": {
 		"@axnic/pi-extension-settings": "^0.2.0",
