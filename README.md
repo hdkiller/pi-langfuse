@@ -29,6 +29,7 @@ Compared to the original `pi-langfuse-extension`, this fork currently improves:
 - **Better trace metadata** for project/model/provider/session context
 - **Support for `LANGFUSE_HOST`** in addition to `LANGFUSE_BASE_URL`
 - **Better config diagnostics** for missing keys and invalid base URLs
+- **Full prompt capture**: `llm-response` generation receives the complete chat messages array (system prompt, conversation history, tool calls) so Langfuse UI shows the full LLM prompt natively
 
 ## Quick Install
 
@@ -165,6 +166,11 @@ pi -e npm:@hdkiller/pi-langfuse "your prompt"
 | **Prompt + Turn Hierarchy** | Records prompt-level and per-turn observations for Pi agent loops |
 | **Tool Execution Spans** | Records tool calls with args summary, partial progress, results, duration, and errors |
 | **Session Tracking** | Groups traces by Pi session ID |
+| **Model Info** | Records model name and provider |
+| **Token Usage** | Tracks input/output/cache tokens per generation |
+| **Cost Tracking** | Records API costs when available |
+| **Full Prompt Capture** | Complete chat messages (system prompt, history, tool calls) sent as generation input — visible natively in Langfuse UI |
+| **Release/Environment** | Propagates `release` and `environment` for filtering and experimentation |
 | **Model Info** | Records model name and provider |
 | **Token Usage** | Tracks input/output/cache tokens per generation |
 | **Cost Tracking** | Records API costs when available |

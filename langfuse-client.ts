@@ -12,6 +12,10 @@ type TraceUpdateBody = {
 	sessionId?: string;
 	userId?: string;
 	tags?: string[];
+	release?: string;
+	version?: string;
+	environment?: string;
+	public?: boolean;
 };
 
 type ObservationEndBody = {
@@ -31,7 +35,7 @@ export interface LangfuseTrace {
 
 export interface LangfuseSpan {
 	id: string;
-	update?(body?: {
+	update?(body: {
 		metadata?: LangfuseMetadata;
 		input?: unknown;
 		output?: unknown;
@@ -42,7 +46,7 @@ export interface LangfuseSpan {
 
 export interface LangfuseGeneration {
 	id: string;
-	update?(body?: {
+	update?(body: {
 		metadata?: LangfuseMetadata;
 		usage?: unknown;
 		usageDetails?: Record<string, number>;
@@ -62,6 +66,10 @@ export interface LangfuseClient {
 		sessionId?: string;
 		userId?: string;
 		tags?: string[];
+		release?: string;
+		version?: string;
+		environment?: string;
+		public?: boolean;
 	}): LangfuseTrace;
 	span(body: {
 		name: string;
@@ -82,6 +90,7 @@ export interface LangfuseClient {
 		usageDetails?: Record<string, number>;
 		model?: string;
 		costDetails?: Record<string, number>;
+		version?: string;
 	}): LangfuseGeneration;
 	score(body: {
 		name: string;

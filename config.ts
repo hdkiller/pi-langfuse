@@ -10,6 +10,8 @@ export interface Config {
 	enabled: boolean;
 	userId: string;
 	defaultTags: string[];
+	release: string;
+	environment: string;
 	traceInputMaxChars: number;
 	traceOutputMaxChars: number;
 	toolArgsMaxChars: number;
@@ -106,6 +108,22 @@ export function resolveConfig(settings: Partial<SettingsValues>): Config {
 				process.env.PI_LANGFUSE_TAGS ||
 				"",
 		),
+		release:
+			settings.release ||
+			String(
+				fileConfig.release ??
+					process.env.LANGFUSE_RELEASE ??
+					process.env.PI_LANGFUSE_RELEASE ??
+					"",
+			),
+		environment:
+			settings.environment ||
+			String(
+				fileConfig.environment ??
+					process.env.LANGFUSE_ENV ??
+					process.env.PI_LANGFUSE_ENV ??
+					"",
+			),
 		traceInputMaxChars: clampNumber(
 			settings["trace-input-max-chars"] ?? fileConfig.traceInputMaxChars,
 			DEFAULT_SETTINGS["trace-input-max-chars"],

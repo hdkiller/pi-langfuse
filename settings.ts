@@ -14,6 +14,8 @@ export interface SettingsValues {
 	"base-url": string;
 	"user-id": string;
 	"default-tags": string;
+	release: string;
+	environment: string;
 	"trace-input-max-chars": number;
 	"trace-output-max-chars": number;
 	"tool-args-max-chars": number;
@@ -29,6 +31,8 @@ export const DEFAULT_SETTINGS: SettingsValues = {
 	"base-url": "https://cloud.langfuse.com",
 	"user-id": "",
 	"default-tags": "",
+	release: "",
+	environment: "",
 	"trace-input-max-chars": 2000,
 	"trace-output-max-chars": 2000,
 	"tool-args-max-chars": 500,
@@ -92,6 +96,18 @@ export function createSettingsNodes(defaults: SettingsValues) {
 			label: "Default Tags",
 			description: "Optional comma-separated tags added to every trace.",
 			default: defaults["default-tags"],
+		},
+		release: {
+			_tag: "text",
+			label: "Release",
+			description: "Optional release name/version (e.g. v1.0.0).",
+			default: defaults.release,
+		},
+		environment: {
+			_tag: "text",
+			label: "Environment",
+			description: "Optional environment name (e.g. production, staging).",
+			default: defaults.environment,
 		},
 		"trace-input-max-chars": {
 			_tag: "number",
@@ -197,6 +213,8 @@ export function getSettingsValues(pi?: ExtensionAPI): SettingsValues {
 		"base-url": values["base-url"] ?? DEFAULT_SETTINGS["base-url"],
 		"user-id": values["user-id"] ?? DEFAULT_SETTINGS["user-id"],
 		"default-tags": values["default-tags"] ?? DEFAULT_SETTINGS["default-tags"],
+		release: values.release ?? DEFAULT_SETTINGS.release,
+		environment: values.environment ?? DEFAULT_SETTINGS.environment,
 		"trace-input-max-chars":
 			values["trace-input-max-chars"] ??
 			DEFAULT_SETTINGS["trace-input-max-chars"],

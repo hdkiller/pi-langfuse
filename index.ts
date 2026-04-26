@@ -35,6 +35,7 @@ interface PromptState {
 	trace: LangfuseTrace;
 	promptSpan?: LangfuseSpan;
 	userPrompt: string;
+	systemPrompt: string;
 	cwd: string;
 	startedAt: number;
 	toolCalls: number;
@@ -48,12 +49,21 @@ interface PromptState {
 	lastUsage?: PiUsage;
 	activeTurns: Map<number, TurnState>;
 	activeTools: Map<string, ToolState>;
+	lastMessages?: Array<{ role: string; content: unknown }>;
 }
 
 interface TurnState {
 	index: number;
 	startedAt: number;
 	span?: LangfuseSpan;
+	generation?: LangfuseGeneration;
+	streamingText?: string;
+	streamingThinking?: string;
+	requests?: Array<{
+		timestamp: string;
+		payloadSize: number;
+		model: string;
+	}>;
 }
 
 interface ToolState {
@@ -84,6 +94,8 @@ function getLiveSettingsView(
 		"base-url": config.host,
 		"user-id": config.userId,
 		"default-tags": config.defaultTags.join(", "),
+		release: config.release,
+		environment: config.environment,
 		"trace-input-max-chars": config.traceInputMaxChars,
 		"trace-output-max-chars": config.traceOutputMaxChars,
 		"tool-args-max-chars": config.toolArgsMaxChars,
@@ -240,6 +252,17 @@ async function finalizePrompt(config: Config | undefined, flush = false) {
 	promptState.activeTools.clear();
 
 	for (const [, turn] of promptState.activeTurns) {
+		if (turn.generation) {
+			turn.generation.end({
+				isError: true,
+				statusMessage: "generation abandoned during prompt finalization",
+				metadata: {
+					abandoned: true,
+					turnIndex: turn.index,
+					durationMs: Date.now() - turn.startedAt,
+				},
+			});
+		}
 		turn.span?.end({
 			metadata: {
 				turnIndex: turn.index,
@@ -268,8 +291,14 @@ async function finalizePrompt(config: Config | undefined, flush = false) {
 		userId: getUserId(config),
 		sessionId: currentSessionId || undefined,
 		tags: buildTraceTags(config, promptState.cwd),
+		release: config?.release || undefined,
+		environment: config?.environment || undefined,
 		metadata: {
 			cwd: promptState.cwd,
+			systemPrompt: truncate(
+				promptState.systemPrompt,
+				config?.traceInputMaxChars ?? 2000,
+			),
 			model: currentModel,
 			provider: currentProvider,
 			sessionReason: currentSessionReason,
@@ -389,8 +418,14 @@ export default async function (pi: ExtensionAPI) {
 				sessionId: currentSessionId || undefined,
 				userId: getUserId(config),
 				tags: buildTraceTags(config, cwd),
+				release: config.release || undefined,
+				environment: config.environment || undefined,
 				metadata: {
 					cwd,
+					systemPrompt: truncate(
+						event.systemPrompt || "",
+						config.traceInputMaxChars,
+					),
 					model: currentModel,
 					provider: currentProvider,
 					sessionReason: currentSessionReason,
@@ -400,6 +435,7 @@ export default async function (pi: ExtensionAPI) {
 			promptState = {
 				trace,
 				userPrompt: event.prompt,
+				systemPrompt: event.systemPrompt || "",
 				cwd,
 				startedAt: Date.now(),
 				toolCalls: 0,
@@ -466,6 +502,27 @@ export default async function (pi: ExtensionAPI) {
 		} catch (e) {
 			console.warn("📊 Langfuse: Failed to create turn span", e);
 		}
+	});
+
+	// Capture full messages (system prompt + conversation history + tools) before
+	// each LLM call. These are used as the generation input so Langfuse UI shows
+	// the complete prompt instead of just the user's text.
+	pi.on("context", async (event) => {
+		if (!promptState) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		const activeTurns = Array.from(promptState.activeTurns.values());
+		const activeTurn =
+			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
+		if (!activeTurn) return;
+
+		// The context event provides a DEEP COPY of messages — safe to store.
+		// These are the messages that will be sent to the LLM for this turn.
+		promptState.lastMessages = event.messages as Array<{
+			role: string;
+			content: unknown;
+		}>;
 	});
 
 	pi.on("tool_call", async (event) => {
@@ -566,7 +623,91 @@ export default async function (pi: ExtensionAPI) {
 		promptState?.activeTools.delete(event.toolCallId);
 	});
 
-	pi.on("turn_end", async (event) => {
+	pi.on("message_start", async (event) => {
+		if (!promptState) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		const message = event.message as { role?: string };
+		if (message.role !== "assistant") return;
+
+		const activeTurns = Array.from(promptState.activeTurns.values());
+		const turnState =
+			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
+		if (!turnState) return;
+
+		turnState.streamingText = "";
+		turnState.streamingThinking = "";
+
+		// Use the full messages captured from `context` as generation input.
+		// Langfuse renders chat message arrays natively in the UI, showing the
+		// complete LLM prompt (system prompt, conversation history, tools, etc.),
+		// instead of just the raw user text.
+		const generationInput = promptState.lastMessages
+			? promptState.lastMessages
+			: truncate(promptState.userPrompt, config.traceInputMaxChars);
+
+		try {
+			const lf = await getClient(config);
+			turnState.generation = lf.generation({
+				name: "llm-response",
+				traceId: promptState.trace.id,
+				parentObservationId: turnState.span?.id || promptState.promptSpan?.id,
+				input: generationInput,
+				metadata: {
+					turnIndex: turnState.index,
+					model: currentModel,
+					provider: currentProvider,
+				},
+			});
+		} catch (e) {
+			console.warn("📊 Langfuse: Failed to start generation", e);
+		}
+	});
+
+	pi.on("message_update", async (event) => {
+		if (!promptState) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		const message = event.message as { role?: string };
+		if (message.role !== "assistant") return;
+
+		const activeTurns = Array.from(promptState.activeTurns.values());
+		const turnState =
+			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
+		if (!turnState || !turnState.generation) return;
+
+		const assistantEvent = event.assistantMessageEvent as {
+			type: string;
+			delta?: string;
+		};
+		if (!assistantEvent) return;
+
+		if (assistantEvent.type === "text_delta") {
+			turnState.streamingText =
+				(turnState.streamingText || "") + (assistantEvent.delta ?? "");
+		} else if (assistantEvent.type === "thinking_delta") {
+			turnState.streamingThinking =
+				(turnState.streamingThinking || "") + (assistantEvent.delta ?? "");
+		}
+
+		// Optionally update the generation in real-time if configured
+		if (config.captureMessageUpdates) {
+			turnState.generation.update?.({
+				output: truncate(
+					(turnState.streamingThinking || "") + (turnState.streamingText || ""),
+					config.traceOutputMaxChars,
+				),
+				metadata: {
+					hasThinking: !!turnState.streamingThinking,
+					partial: true,
+				},
+			});
+		}
+	});
+
+	pi.on("message_end", async (event) => {
 		if (!promptState) return;
 		const config = resolveConfig(settings);
 		if (!canTrace(config)) return;
@@ -577,80 +718,98 @@ export default async function (pi: ExtensionAPI) {
 			model?: string;
 			usage?: PiUsage;
 		};
-		const turnState = promptState.activeTurns.get(event.turnIndex);
+		if (message.role !== "assistant") return;
+
+		const activeTurns = Array.from(promptState.activeTurns.values());
+		const turnState =
+			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
+		if (!turnState || !turnState.generation) return;
+
 		const outputText = extractTextFromContent(message.content).trim();
+		const finalOutput =
+			outputText ||
+			(turnState.streamingThinking || "") + (turnState.streamingText || "");
+
 		const usage = message.usage;
 		const standardUsage = standardUsageFromUsage(usage);
 		const usageDetails = usageDetailsFromUsage(usage);
 		const costDetails = costDetailsFromUsage(usage);
 
-		if (message.role === "assistant") {
-			promptState.lastAssistantText = truncate(
-				outputText,
-				config.traceOutputMaxChars,
-			);
-			promptState.lastUsage = usage;
-			promptState.tokensIn +=
-				(usage?.input ?? 0) +
-				(usage?.cacheRead ?? 0) +
-				(usage?.cacheWrite ?? 0);
-			promptState.tokensOut += usage?.output ?? 0;
-			promptState.cacheRead += usage?.cacheRead ?? 0;
-			promptState.cacheWrite += usage?.cacheWrite ?? 0;
+		promptState.lastAssistantText = truncate(
+			finalOutput,
+			config.traceOutputMaxChars,
+		);
+		promptState.lastUsage = usage;
 
-			try {
-				const lf = await getClient(config);
-				const generation: LangfuseGeneration = lf.generation({
-					name: "llm-response",
-					traceId: promptState.trace.id,
-					parentObservationId:
-						turnState?.span?.id || promptState.promptSpan?.id,
-					input: truncate(promptState.userPrompt, config.traceInputMaxChars),
-					output: truncate(outputText, config.traceOutputMaxChars),
-					model: message.model || currentModel,
-					usage: standardUsage,
-					usageDetails,
-					costDetails,
-					metadata: {
-						provider: currentProvider,
-						turnIndex: event.turnIndex,
-						toolResults: event.toolResults?.length ?? 0,
-					},
-				});
-				generation.end({
-					output: truncate(outputText, config.traceOutputMaxChars) || undefined,
-					usage: standardUsage,
-					usageDetails,
-					costDetails,
-				});
-				if (usage?.input) {
-					lf.score({
-						name: "input_tokens",
-						value: usage.input,
-						traceId: promptState.trace.id,
-						observationId: generation.id,
-					});
-				}
-				if (usage?.output) {
-					lf.score({
-						name: "output_tokens",
-						value: usage.output,
-						traceId: promptState.trace.id,
-						observationId: generation.id,
-					});
-				}
-				if (typeof usage?.cost?.total === "number") {
-					lf.score({
-						name: "total_cost",
-						value: usage.cost.total,
-						traceId: promptState.trace.id,
-						observationId: generation.id,
-					});
-				}
-			} catch (e) {
-				console.warn("📊 Langfuse: Failed to create generation", e);
-			}
+		if (usage) {
+			promptState.tokensIn +=
+				(usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
+			promptState.tokensOut += usage.output ?? 0;
+			promptState.cacheRead += usage.cacheRead ?? 0;
+			promptState.cacheWrite += usage.cacheWrite ?? 0;
 		}
+
+		try {
+			turnState.generation.end({
+				output: truncate(finalOutput, config.traceOutputMaxChars) || undefined,
+				usage: standardUsage,
+				usageDetails,
+				costDetails,
+				metadata: {
+					model: message.model || currentModel,
+					provider: currentProvider,
+					turnIndex: turnState.index,
+					thinking: turnState.streamingThinking || undefined,
+				},
+			});
+
+			const lf = await getClient(config);
+			if (usage?.input) {
+				lf.score({
+					name: "input_tokens",
+					value: usage.input,
+					traceId: promptState.trace.id,
+					observationId: turnState.generation.id,
+				});
+			}
+			if (usage?.output) {
+				lf.score({
+					name: "output_tokens",
+					value: usage.output,
+					traceId: promptState.trace.id,
+					observationId: turnState.generation.id,
+				});
+			}
+			if (typeof usage?.cost?.total === "number") {
+				lf.score({
+					name: "total_cost",
+					value: usage.cost.total,
+					traceId: promptState.trace.id,
+					observationId: turnState.generation.id,
+				});
+			}
+		} catch (e) {
+			console.warn("📊 Langfuse: Failed to end generation", e);
+		}
+	});
+
+	pi.on("turn_end", async (event) => {
+		if (!promptState) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		const message = event.message as {
+			role?: string;
+			content?: Array<{ type: string; text?: string }>;
+			usage?: PiUsage;
+		};
+		const turnState = promptState.activeTurns.get(event.turnIndex);
+		const outputText = extractTextFromContent(message.content).trim();
+
+		const usage = message.usage;
+		const standardUsage = standardUsageFromUsage(usage);
+		const usageDetails = usageDetailsFromUsage(usage);
+		const costDetails = costDetailsFromUsage(usage);
 
 		turnState?.span?.end({
 			output: outputText
@@ -666,6 +825,40 @@ export default async function (pi: ExtensionAPI) {
 			},
 		});
 		promptState.activeTurns.delete(event.turnIndex);
+	});
+
+	pi.on("before_provider_request", async (event) => {
+		if (!promptState) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		const activeTurns = Array.from(promptState.activeTurns.values());
+		const turnState =
+			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
+		if (!turnState) return;
+
+		try {
+			const payloadSize = JSON.stringify(event.payload).length;
+			if (!turnState.requests) turnState.requests = [];
+			const reqModel =
+				typeof (event.payload as Record<string, unknown>)?.model === "string"
+					? ((event.payload as Record<string, unknown>).model as string)
+					: currentModel;
+			turnState.requests.push({
+				timestamp: new Date().toISOString(),
+				payloadSize,
+				model: reqModel,
+			});
+
+			// Update turn span metadata with requests info
+			turnState.span?.update?.({
+				metadata: {
+					requests: turnState.requests,
+				},
+			});
+		} catch (e) {
+			// ignore
+		}
 	});
 
 	pi.on("agent_end", async (event) => {
