@@ -1,9 +1,18 @@
 {
 	"github": {
-		"release": true
+		"release": true,
+		"releaseName": "v${version}"
 	},
 	"npm": {
 		"publish": true
+	},
+	"plugins": {
+		"@release-it/conventional-changelog": {
+			"infile": "CHANGELOG.md",
+			"preset": {
+				"name": "conventionalcommits"
+			}
+		}
 	},
 	"hooks": {
 		"before:init": ["npm run typecheck", "npm run test"],
