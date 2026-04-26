@@ -7,8 +7,23 @@ import {
 	shutdownClient,
 } from "../src/langfuse-client.js";
 
+interface LangfuseTraceResponse {
+	name: string;
+	id: string;
+	tags: string[];
+	observations: Array<{
+		name: string;
+		model?: string;
+		usage?: {
+			total?: number;
+		};
+	}>;
+}
+
 const skipE2E =
-	!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY;
+	process.env.RUN_LANGFUSE_E2E !== "1" ||
+	!process.env.LANGFUSE_PUBLIC_KEY ||
+	!process.env.LANGFUSE_SECRET_KEY;
 
 describe.runIf(!skipE2E)("Langfuse E2E Integration", () => {
 	const config = resolveConfig({});
@@ -63,7 +78,7 @@ describe.runIf(!skipE2E)("Langfuse E2E Integration", () => {
 			: config.host;
 		const apiUrl = `${baseUrl}/api/public/traces/${testId}`;
 
-		let retrievedTrace: any = null;
+		let retrievedTrace: LangfuseTraceResponse | null = null;
 		let attempts = 0;
 		const maxAttempts = 10;
 
@@ -78,7 +93,7 @@ describe.runIf(!skipE2E)("Langfuse E2E Integration", () => {
 			});
 
 			if (response.ok) {
-				retrievedTrace = await response.json();
+				retrievedTrace = (await response.json()) as LangfuseTraceResponse;
 				break;
 			}
 
@@ -96,10 +111,10 @@ describe.runIf(!skipE2E)("Langfuse E2E Integration", () => {
 		expect(retrievedTrace.observations.length).toBeGreaterThanOrEqual(2);
 
 		const genObs = retrievedTrace.observations.find(
-			(o: any) => o.name === "test.generation",
+			(o) => o.name === "test.generation",
 		);
 		expect(genObs).toBeDefined();
 		expect(genObs.model).toBe("gpt-3.5-turbo");
-		expect(genObs.usage.total).toBe(10);
+		expect(genObs?.usage?.total).toBe(10);
 	}, 30000); // 30s timeout for E2E
 });

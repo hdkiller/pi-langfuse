@@ -1,6 +1,8 @@
 import { beforeEach, describe, it, vi } from "vitest";
 import registerExtension from "./index.js";
 
+type ExtensionArg = Parameters<typeof registerExtension>[0];
+
 describe("index (extension entry)", () => {
 	const mockPi = {
 		events: {
@@ -17,7 +19,7 @@ describe("index (extension entry)", () => {
 	});
 
 	it("should update state on session_start", async () => {
-		await registerExtension(mockPi as any);
+		await registerExtension(mockPi as unknown as ExtensionArg);
 
 		// Find the session_start handler
 		const sessionStartHandler = mockPi.on.mock.calls.find(
@@ -36,7 +38,7 @@ describe("index (extension entry)", () => {
 	});
 
 	it("should update model on model_select", async () => {
-		await registerExtension(mockPi as any);
+		await registerExtension(mockPi as unknown as ExtensionArg);
 
 		const modelSelectHandler = mockPi.on.mock.calls.find(
 			(call) => call[0] === "model_select",

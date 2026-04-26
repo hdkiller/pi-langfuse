@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	DEFAULT_SETTINGS,
@@ -47,19 +48,18 @@ describe("settings", () => {
 		expect(settings["base-url"]).toBe(DEFAULT_SETTINGS["base-url"]);
 	});
 
-	it("should register settings with pi", () => {
+	it("should register settings with pi", async () => {
 		const mockPi = {
 			events: {
 				emit: vi.fn(),
 			},
 		};
-		import("./settings.js").then((mod) => {
-			mod.registerSettings(mockPi as any);
-			expect(mockPi.events.emit).toHaveBeenCalledWith(
-				"pi-extension-settings:register",
-				expect.any(Object),
-			);
-		});
+		const mod = await import("./settings.js");
+		mod.registerSettings(mockPi as unknown as ExtensionAPI);
+		expect(mockPi.events.emit).toHaveBeenCalledWith(
+			"pi-extension-settings:register",
+			expect.any(Object),
+		);
 	});
 
 	it("should retrieve values via event if available", () => {
@@ -72,7 +72,7 @@ describe("settings", () => {
 				}),
 			},
 		};
-		const values = getStoredSettingsValues(mockPi as any);
+		const values = getStoredSettingsValues(mockPi as unknown as ExtensionAPI);
 		expect(values.enabled).toBe(false);
 	});
 });

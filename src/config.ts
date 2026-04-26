@@ -23,6 +23,7 @@ export interface Config {
 export function loadConfigFile(): Partial<Config> {
 	const configPath = resolve(
 		dirname(fileURLToPath(import.meta.url)),
+		"..",
 		"config.json",
 	);
 

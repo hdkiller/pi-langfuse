@@ -30,6 +30,7 @@ jobs:
 
     - name: Run Tests
       env:
+        RUN_LANGFUSE_E2E: "1"
         LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
         LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
         LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
