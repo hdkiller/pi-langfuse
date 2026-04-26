@@ -1,11 +1,11 @@
 {
 	"git": {
-		"pushRepo": "origin"
+		"pushRepo": "origin",
+		"tagName": "v${version}",
+		"push": true
 	},
 	"github": {
-		"release": true,
-		"releaseName": "v${version}",
-		"tokenRef": "GH_TOKEN"
+		"release": false
 	},
 	"npm": {
 		"publish": true
@@ -20,6 +20,7 @@
 	},
 	"hooks": {
 		"before:init": ["npm run typecheck", "npm run test"],
-		"after:bump": "npm run build"
+		"after:bump": "npm run build",
+		"after:release": "gh release create v${version} --title \"v${version}\" --notes \"$(cat CHANGELOG.md)\""
 	}
 }
