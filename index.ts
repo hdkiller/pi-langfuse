@@ -1,6 +1,11 @@
 import { basename } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { canTrace, resolveConfig } from "./config.ts";
+import {
+	type Config,
+	canTrace,
+	getConfigWarnings,
+	resolveConfig,
+} from "./config.ts";
 import {
 	flushClient,
 	getClient,
@@ -77,6 +82,14 @@ function getLiveSettingsView(
 		"public-key": config.publicKey,
 		"secret-key": config.secretKey,
 		"base-url": config.host,
+		"user-id": config.userId,
+		"default-tags": config.defaultTags.join(", "),
+		"trace-input-max-chars": config.traceInputMaxChars,
+		"trace-output-max-chars": config.traceOutputMaxChars,
+		"tool-args-max-chars": config.toolArgsMaxChars,
+		"tool-output-max-chars": config.toolOutputMaxChars,
+		"capture-tool-progress": config.captureToolProgress,
+		"capture-message-updates": config.captureMessageUpdates,
 	};
 }
 
@@ -90,6 +103,9 @@ function announceConfigState(settings: Partial<SettingsValues>) {
 		console.log(
 			"📊 Langfuse: Configure public/secret key in settings, config.json, or LANGFUSE_* env vars to enable",
 		);
+	}
+	for (const warning of getConfigWarnings(config)) {
+		console.warn(`📊 Langfuse: ${warning}`);
 	}
 }
 
@@ -105,30 +121,31 @@ function safeJson(value: unknown, max = 1200) {
 	}
 }
 
-function summarizeToolArgs(toolName: string, args: unknown) {
-	if (!args || typeof args !== "object") return safeJson(args, 300);
+function summarizeToolArgs(config: Config, toolName: string, args: unknown) {
+	if (!args || typeof args !== "object")
+		return safeJson(args, config.toolArgsMaxChars);
 	const data = args as Record<string, unknown>;
 	switch (toolName) {
 		case "bash":
-			return truncate(String(data.command ?? ""), 300);
+			return truncate(String(data.command ?? ""), config.toolArgsMaxChars);
 		case "read":
 			return truncate(
 				`${String(data.path ?? "")}#${String(data.offset ?? 1)}:${String(data.limit ?? "")}`,
-				300,
+				config.toolArgsMaxChars,
 			);
 		case "write":
 		case "edit":
-			return truncate(String(data.path ?? ""), 300);
+			return truncate(String(data.path ?? ""), config.toolArgsMaxChars);
 		case "web_search":
 			return truncate(
 				String(
 					data.query ??
 						(Array.isArray(data.queries) ? data.queries.join(" | ") : ""),
 				),
-				300,
+				config.toolArgsMaxChars,
 			);
 		default:
-			return safeJson(args, 500);
+			return safeJson(args, config.toolArgsMaxChars);
 	}
 }
 
@@ -142,15 +159,16 @@ function extractTextFromContent(
 		.join("\n");
 }
 
-function summarizeToolResult(result: unknown) {
+function summarizeToolResult(config: Config, result: unknown) {
 	if (!result) return "";
-	if (typeof result === "string") return truncate(result, 2000);
+	if (typeof result === "string")
+		return truncate(result, config.toolOutputMaxChars);
 	if (typeof result === "object") {
 		const data = result as { content?: Array<{ type: string; text?: string }> };
 		const text = extractTextFromContent(data.content);
-		if (text) return truncate(text, 2000);
+		if (text) return truncate(text, config.toolOutputMaxChars);
 	}
-	return safeJson(result, 2000);
+	return safeJson(result, config.toolOutputMaxChars);
 }
 
 function usageDetailsFromUsage(usage?: PiUsage) {
@@ -187,18 +205,12 @@ function costDetailsFromUsage(usage?: PiUsage) {
 	return Object.keys(details).length > 0 ? details : undefined;
 }
 
-function getUserId() {
-	return (
-		process.env.PI_LANGFUSE_USER_ID ||
-		process.env.LANGFUSE_USER_ID ||
-		process.env.USER ||
-		process.env.LOGNAME ||
-		undefined
-	);
+function getUserId(config?: Config) {
+	return config?.userId || undefined;
 }
 
-function buildTraceTags(cwd: string) {
-	const tags = ["pi", "pi-langfuse"];
+function buildTraceTags(config: Config | undefined, cwd: string) {
+	const tags = ["pi", "pi-langfuse", ...(config?.defaultTags ?? [])];
 	const projectName = basename(cwd || process.cwd());
 	if (projectName) tags.push(`project:${projectName}`);
 	if (currentProvider) tags.push(`provider:${currentProvider}`);
@@ -207,7 +219,7 @@ function buildTraceTags(cwd: string) {
 	return Array.from(new Set(tags)).slice(0, 20);
 }
 
-async function finalizePrompt(flush = false) {
+async function finalizePrompt(config: Config | undefined, flush = false) {
 	if (!promptState) return;
 
 	for (const [, tool] of promptState.activeTools) {
@@ -253,9 +265,9 @@ async function finalizePrompt(flush = false) {
 
 	promptState.trace.update({
 		output: promptState.lastAssistantText || undefined,
-		userId: getUserId(),
+		userId: getUserId(config),
 		sessionId: currentSessionId || undefined,
-		tags: buildTraceTags(promptState.cwd),
+		tags: buildTraceTags(config, promptState.cwd),
 		metadata: {
 			cwd: promptState.cwd,
 			model: currentModel,
@@ -286,7 +298,7 @@ export default async function (pi: ExtensionAPI) {
 	const refreshConfig = async () => {
 		settings = getStoredSettingsValues(pi);
 		registerSettings(pi, getLiveSettingsView(settings));
-		await finalizePrompt(true);
+		await finalizePrompt(resolveConfig(settings), true);
 		await shutdownClient();
 		announceConfigState(settings);
 	};
@@ -342,12 +354,13 @@ export default async function (pi: ExtensionAPI) {
 		currentModel = event.model?.id || "";
 		currentProvider = event.model?.provider || "";
 		if (promptState) {
+			const config = resolveConfig(settings);
 			promptState.trace.update({
 				metadata: {
 					model: currentModel,
 					provider: currentProvider,
 				},
-				tags: buildTraceTags(promptState.cwd),
+				tags: buildTraceTags(config, promptState.cwd),
 			});
 		}
 	});
@@ -356,7 +369,7 @@ export default async function (pi: ExtensionAPI) {
 		const config = resolveConfig(settings);
 		if (!canTrace(config)) return;
 
-		await finalizePrompt(false);
+		await finalizePrompt(config, false);
 
 		try {
 			const lf = await getClient(config);
@@ -372,10 +385,10 @@ export default async function (pi: ExtensionAPI) {
 
 			const trace = lf.trace({
 				name: "pi-agent",
-				input: truncate(event.prompt, 2000),
+				input: truncate(event.prompt, config.traceInputMaxChars),
 				sessionId: currentSessionId || undefined,
-				userId: getUserId(),
-				tags: buildTraceTags(cwd),
+				userId: getUserId(config),
+				tags: buildTraceTags(config, cwd),
 				metadata: {
 					cwd,
 					model: currentModel,
@@ -414,7 +427,7 @@ export default async function (pi: ExtensionAPI) {
 			promptState.promptSpan = lf.span({
 				name: "agent.prompt",
 				traceId: promptState.trace.id,
-				input: truncate(promptState.userPrompt, 1200),
+				input: truncate(promptState.userPrompt, config.traceInputMaxChars),
 				metadata: {
 					cwd: promptState.cwd,
 					model: currentModel,
@@ -458,7 +471,8 @@ export default async function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event) => {
 		const tool = promptState?.activeTools.get(event.toolCallId);
 		if (!tool) return;
-		tool.argsSummary = summarizeToolArgs(event.toolName, event.input);
+		const config = resolveConfig(settings);
+		tool.argsSummary = summarizeToolArgs(config, event.toolName, event.input);
 		tool.span?.update?.({
 			input: tool.argsSummary,
 			metadata: {
@@ -480,7 +494,7 @@ export default async function (pi: ExtensionAPI) {
 		const toolState: ToolState = {
 			toolName: event.toolName,
 			startedAt: Date.now(),
-			argsSummary: summarizeToolArgs(event.toolName, event.args),
+			argsSummary: summarizeToolArgs(config, event.toolName, event.args),
 		};
 		promptState.activeTools.set(event.toolCallId, toolState);
 
@@ -506,7 +520,9 @@ export default async function (pi: ExtensionAPI) {
 	pi.on("tool_execution_update", async (event) => {
 		const tool = promptState?.activeTools.get(event.toolCallId);
 		if (!tool) return;
-		tool.partialOutput = summarizeToolResult(event.partialResult);
+		const config = resolveConfig(settings);
+		if (!config.captureToolProgress) return;
+		tool.partialOutput = summarizeToolResult(config, event.partialResult);
 		tool.span?.update?.({
 			output: tool.partialOutput,
 			metadata: {
@@ -519,20 +535,22 @@ export default async function (pi: ExtensionAPI) {
 	pi.on("tool_result", async (event) => {
 		const tool = promptState?.activeTools.get(event.toolCallId);
 		if (!tool) return;
-		tool.resultOutput = summarizeToolResult({ content: event.content });
+		const config = resolveConfig(settings);
+		tool.resultOutput = summarizeToolResult(config, { content: event.content });
 		tool.isError = event.isError;
 	});
 
 	pi.on("tool_execution_end", async (event) => {
 		const tool = promptState?.activeTools.get(event.toolCallId);
 		if (!tool) return;
+		const config = resolveConfig(settings);
 		tool.isError = event.isError;
 		if (event.isError) {
 			promptState!.toolErrors += 1;
 		}
 		const durationMs = Date.now() - tool.startedAt;
 		const output =
-			summarizeToolResult(event.result) ||
+			summarizeToolResult(config, event.result) ||
 			tool.resultOutput ||
 			tool.partialOutput;
 		tool.span?.end({
@@ -567,7 +585,10 @@ export default async function (pi: ExtensionAPI) {
 		const costDetails = costDetailsFromUsage(usage);
 
 		if (message.role === "assistant") {
-			promptState.lastAssistantText = truncate(outputText, 4000);
+			promptState.lastAssistantText = truncate(
+				outputText,
+				config.traceOutputMaxChars,
+			);
 			promptState.lastUsage = usage;
 			promptState.tokensIn +=
 				(usage?.input ?? 0) +
@@ -584,8 +605,8 @@ export default async function (pi: ExtensionAPI) {
 					traceId: promptState.trace.id,
 					parentObservationId:
 						turnState?.span?.id || promptState.promptSpan?.id,
-					input: truncate(promptState.userPrompt, 1200),
-					output: truncate(outputText, 2000),
+					input: truncate(promptState.userPrompt, config.traceInputMaxChars),
+					output: truncate(outputText, config.traceOutputMaxChars),
 					model: message.model || currentModel,
 					usage: standardUsage,
 					usageDetails,
@@ -597,7 +618,7 @@ export default async function (pi: ExtensionAPI) {
 					},
 				});
 				generation.end({
-					output: truncate(outputText, 2000) || undefined,
+					output: truncate(outputText, config.traceOutputMaxChars) || undefined,
 					usage: standardUsage,
 					usageDetails,
 					costDetails,
@@ -632,7 +653,9 @@ export default async function (pi: ExtensionAPI) {
 		}
 
 		turnState?.span?.end({
-			output: outputText ? truncate(outputText, 1200) : undefined,
+			output: outputText
+				? truncate(outputText, config.traceOutputMaxChars)
+				: undefined,
 			usage: standardUsage,
 			usageDetails,
 			costDetails,
@@ -660,10 +683,14 @@ export default async function (pi: ExtensionAPI) {
 		if (lastAssistant) {
 			const output = extractTextFromContent(lastAssistant.content).trim();
 			if (output) {
-				promptState.lastAssistantText = truncate(output, 4000);
+				const config = resolveConfig(settings);
+				promptState.lastAssistantText = truncate(
+					output,
+					config.traceOutputMaxChars,
+				);
 			}
 		}
-		await finalizePrompt(true);
+		await finalizePrompt(resolveConfig(settings), true);
 	});
 
 	pi.on("session_compact", async () => {
@@ -677,7 +704,7 @@ export default async function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
-		await finalizePrompt(true);
+		await finalizePrompt(resolveConfig(settings), true);
 		await shutdownClient();
 	});
 }

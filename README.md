@@ -17,16 +17,18 @@ Compared to the original `pi-langfuse-extension`, this fork currently improves:
 
 - **Prompt + turn hierarchy** instead of mostly flat trace data
 - **Tool execution spans** tied to Pi lifecycle events
-- **Partial tool progress capture** via `tool_execution_update`
+- **Configurable partial tool progress capture** via `tool_execution_update`
 - **Tool duration and error tracking**
 - **Assistant-turn generations** with usage and cost details
 - **Session/user/tag propagation** for better filtering in Langfuse
+- **Configurable truncation controls** for prompt/tool input and output capture
 - **Safer client lifecycle**
   - no shutdown on every prompt
   - explicit flush/finalization on prompt/session end
   - cleanup of abandoned tool/turn spans
 - **Better trace metadata** for project/model/provider/session context
 - **Support for `LANGFUSE_HOST`** in addition to `LANGFUSE_BASE_URL`
+- **Better config diagnostics** for missing keys and invalid base URLs
 
 ## Quick Install
 
@@ -65,7 +67,15 @@ Create `config.json` in the extension directory:
   "enabled": false,
   "publicKey": "pk-lf-xxxx",
   "secretKey": "sk-lf-xxxx",
-  "host": "https://cloud.langfuse.com"
+  "host": "https://cloud.langfuse.com",
+  "userId": "",
+  "defaultTags": ["team:platform", "env:local"],
+  "traceInputMaxChars": 2000,
+  "traceOutputMaxChars": 2000,
+  "toolArgsMaxChars": 500,
+  "toolOutputMaxChars": 2000,
+  "captureToolProgress": true,
+  "captureMessageUpdates": false
 }
 ```
 
@@ -81,6 +91,8 @@ export LANGFUSE_BASE_URL="https://cloud.langfuse.com"
 export LANGFUSE_HOST="https://cloud.langfuse.com"
 # optional user correlation override:
 export PI_LANGFUSE_USER_ID="your-user-id"
+# optional comma-separated tags applied to every trace:
+export PI_LANGFUSE_TAGS="team:platform,env:local"
 ```
 
 For npm installs, the package is typically located at:
@@ -103,6 +115,14 @@ Then configure these fields under `pi-langfuse`:
 - `public-key`
 - `secret-key`
 - `base-url`
+- `user-id`
+- `default-tags`
+- `trace-input-max-chars`
+- `trace-output-max-chars`
+- `tool-args-max-chars`
+- `tool-output-max-chars`
+- `capture-tool-progress`
+- `capture-message-updates` *(reserved for future streaming message capture)*
 
 The `enabled` value in `/extensions:settings` overrides `config.json` for future sessions until you change it again.
 
@@ -148,9 +168,10 @@ pi -e npm:@hdkiller/pi-langfuse "your prompt"
 | **Model Info** | Records model name and provider |
 | **Token Usage** | Tracks input/output/cache tokens per generation |
 | **Cost Tracking** | Records API costs when available |
-| **Tags + User Context** | Adds Pi/project/provider/model/session tags and optional user ID context |
+| **Tags + User Context** | Adds Pi/project/provider/model/session tags plus optional default tags and user ID override |
+| **Configurable Truncation** | Controls prompt/tool input and output capture limits |
 | **Langfuse Sessions** | Traces grouped by conversation session |
-| **Settings Panel Integration** | Exposes live-effective Langfuse settings in `/extensions:settings` |
+| **Settings Panel Integration** | Exposes live-effective Langfuse settings in `/extensions:settings` with diagnostics-friendly defaults |
 | **Quick Toggle Command** | Toggle tracing with `/langfuse:toggle` |
 
 ## Manual Installation
@@ -232,6 +253,7 @@ Before publishing, you should also verify:
 **No traces appearing?**
 - Verify API keys are correct in `/extensions:settings`, `config.json`, or `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`
 - Verify `LANGFUSE_BASE_URL`, `LANGFUSE_HOST`, or `base-url` if you are not using Langfuse Cloud
+- Check the Pi console for config warnings such as missing keys or malformed base URLs
 - Check Langfuse project is active
 - Ensure API keys have write permissions
 

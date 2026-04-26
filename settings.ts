@@ -12,6 +12,14 @@ export interface SettingsValues {
 	"public-key": string;
 	"secret-key": string;
 	"base-url": string;
+	"user-id": string;
+	"default-tags": string;
+	"trace-input-max-chars": number;
+	"trace-output-max-chars": number;
+	"tool-args-max-chars": number;
+	"tool-output-max-chars": number;
+	"capture-tool-progress": boolean;
+	"capture-message-updates": boolean;
 }
 
 export const DEFAULT_SETTINGS: SettingsValues = {
@@ -19,6 +27,14 @@ export const DEFAULT_SETTINGS: SettingsValues = {
 	"public-key": "",
 	"secret-key": "",
 	"base-url": "https://cloud.langfuse.com",
+	"user-id": "",
+	"default-tags": "",
+	"trace-input-max-chars": 2000,
+	"trace-output-max-chars": 2000,
+	"tool-args-max-chars": 500,
+	"tool-output-max-chars": 2000,
+	"capture-tool-progress": true,
+	"capture-message-updates": false,
 };
 
 export const SETTINGS_DOCUMENTATION = `# Langfuse settings
@@ -31,6 +47,8 @@ These settings control how the Langfuse extension connects to your Langfuse proj
 - If you prefer not to store keys here, keep using config.json or environment variables.
 - Resolution order is: settings panel -> config.json -> environment variables -> defaults.
 - When a setting is empty, this panel shows the live fallback value currently resolved from config.json, environment variables, or built-in defaults.
+- Tag lists are comma-separated.
+- Character limits are bounded to sensible minimums/maximums during config resolution.
 `;
 
 export function createSettingsNodes(defaults: SettingsValues) {
@@ -61,6 +79,56 @@ export function createSettingsNodes(defaults: SettingsValues) {
 			description:
 				"Langfuse base URL. Empty means use config.json/env fallback shown here.",
 			default: defaults["base-url"],
+		},
+		"user-id": {
+			_tag: "text",
+			label: "User ID Override",
+			description:
+				"Optional fixed user ID. Empty means use config.json/env fallback shown here.",
+			default: defaults["user-id"],
+		},
+		"default-tags": {
+			_tag: "text",
+			label: "Default Tags",
+			description: "Optional comma-separated tags added to every trace.",
+			default: defaults["default-tags"],
+		},
+		"trace-input-max-chars": {
+			_tag: "number",
+			label: "Trace Input Max Chars",
+			description: "Maximum prompt/input characters recorded in Langfuse.",
+			default: defaults["trace-input-max-chars"],
+		},
+		"trace-output-max-chars": {
+			_tag: "number",
+			label: "Trace Output Max Chars",
+			description: "Maximum assistant/output characters recorded in Langfuse.",
+			default: defaults["trace-output-max-chars"],
+		},
+		"tool-args-max-chars": {
+			_tag: "number",
+			label: "Tool Args Max Chars",
+			description: "Maximum tool argument summary length recorded in Langfuse.",
+			default: defaults["tool-args-max-chars"],
+		},
+		"tool-output-max-chars": {
+			_tag: "number",
+			label: "Tool Output Max Chars",
+			description: "Maximum tool output summary length recorded in Langfuse.",
+			default: defaults["tool-output-max-chars"],
+		},
+		"capture-tool-progress": {
+			_tag: "boolean",
+			label: "Capture Tool Progress",
+			description: "Record partial tool_execution_update output in Langfuse.",
+			default: defaults["capture-tool-progress"],
+		},
+		"capture-message-updates": {
+			_tag: "boolean",
+			label: "Capture Message Updates",
+			description:
+				"Reserved for future streaming assistant update capture. Currently stored but not used.",
+			default: defaults["capture-message-updates"],
 		},
 	} as const;
 }
@@ -127,6 +195,25 @@ export function getSettingsValues(pi?: ExtensionAPI): SettingsValues {
 		"public-key": values["public-key"] ?? DEFAULT_SETTINGS["public-key"],
 		"secret-key": values["secret-key"] ?? DEFAULT_SETTINGS["secret-key"],
 		"base-url": values["base-url"] ?? DEFAULT_SETTINGS["base-url"],
+		"user-id": values["user-id"] ?? DEFAULT_SETTINGS["user-id"],
+		"default-tags": values["default-tags"] ?? DEFAULT_SETTINGS["default-tags"],
+		"trace-input-max-chars":
+			values["trace-input-max-chars"] ??
+			DEFAULT_SETTINGS["trace-input-max-chars"],
+		"trace-output-max-chars":
+			values["trace-output-max-chars"] ??
+			DEFAULT_SETTINGS["trace-output-max-chars"],
+		"tool-args-max-chars":
+			values["tool-args-max-chars"] ?? DEFAULT_SETTINGS["tool-args-max-chars"],
+		"tool-output-max-chars":
+			values["tool-output-max-chars"] ??
+			DEFAULT_SETTINGS["tool-output-max-chars"],
+		"capture-tool-progress":
+			values["capture-tool-progress"] ??
+			DEFAULT_SETTINGS["capture-tool-progress"],
+		"capture-message-updates":
+			values["capture-message-updates"] ??
+			DEFAULT_SETTINGS["capture-message-updates"],
 	};
 }
 

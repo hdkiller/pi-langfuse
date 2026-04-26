@@ -288,7 +288,7 @@ Goal: make `pi-langfuse` a first-class, Langfuse-native observability extension 
 
 ## Phase 8 — SDK modernization
 
-- [ ] Upgrade `langfuse` dependency from `^3.0.0` to the current recommended version
+- [x] Upgrade `langfuse` dependency from `^3.0.0` to the current recommended version
 - [x] Review current Langfuse JS/TS migration guidance before code changes
 - [ ] Evaluate moving to newer patterns such as:
   - `propagateAttributes()`
@@ -299,16 +299,16 @@ Goal: make `pi-langfuse` a first-class, Langfuse-native observability extension 
 
 ### Notes for next session
 
-- This is now the most important remaining implementation track.
-- The current code added richer local typings in `langfuse-client.ts`, but it still targets the currently installed SDK behavior rather than the latest Langfuse migration target.
-- Start here next: upgrade dependency, run type checks, then adapt metadata / trace APIs as needed.
+- This remains an important implementation track.
+- The dependency range now targets the current 3.x release line, but the implementation should still be validated against the latest Langfuse migration target.
+- Start here next: run type checks against the upgraded dependency, then adapt metadata / trace APIs as needed.
 
 ---
 
 ## Phase 9 — Configuration and settings improvements
 
 - [x] Keep current settings integration working
-- [ ] Add optional settings for observability behavior
+- [x] Add optional settings for observability behavior
   - trace input/output limits
   - tool arg/output truncation limits
   - enable/disable tool progress capture
@@ -316,12 +316,13 @@ Goal: make `pi-langfuse` a first-class, Langfuse-native observability extension 
   - optional user ID override
   - optional default tags
 - [x] Decide whether to support `LANGFUSE_HOST` in addition to `LANGFUSE_BASE_URL`
-- [ ] Add validation and better diagnostics for invalid config
+- [x] Add validation and better diagnostics for invalid config
 
 ### Notes for next session
 
 - `LANGFUSE_HOST` support has been added in `config.ts`.
-- Settings are still minimal; truncation/tag/user controls are good candidates for the next config pass.
+- Settings now include truncation limits, default tags, user ID override, and tool-progress capture toggles.
+- `capture-message-updates` is stored in config/settings now, but actual `message_update` event wiring is still future work.
 
 ---
 
@@ -366,7 +367,7 @@ Goal: make `pi-langfuse` a first-class, Langfuse-native observability extension 
 
 ### Milestone 5 — Polish
 - [x] README updates
-- [ ] config/settings additions
+- [x] config/settings additions
 - [ ] optional tests/examples
 
 ---
@@ -380,15 +381,16 @@ Implemented in this session:
 - stopped client shutdown on every prompt; now flushes/finalizes and shuts down at session end
 - added `flushClient()` and richer Langfuse typings in `langfuse-client.ts`
 - added `LANGFUSE_HOST` fallback in `config.ts`
+- added configurable truncation/tag/user/progress settings plus config validation warnings
 - updated `README.md` to describe the richer integration
 
 Highest-priority remaining work:
 
-1. upgrade the Langfuse SDK from `^3.0.0`
-2. validate/adapt the implementation to the latest Langfuse API expectations
-3. consider `message_update` for streaming assistant generation updates
-4. add configurable truncation/redaction/tag settings
-5. verify cancellation semantics and add tests/examples
+1. validate/adapt the implementation to the latest Langfuse API expectations
+2. consider `message_update` for streaming assistant generation updates
+3. verify cancellation semantics and add tests/examples
+4. decide whether to implement streaming assistant `message_update` capture now that config storage is ready
+5. add tests/examples and verify real Langfuse UI behavior end-to-end
 
 Useful files to start with next time:
 
