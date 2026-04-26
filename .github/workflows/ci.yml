@@ -29,6 +29,11 @@ jobs:
       run: npm run typecheck
 
     - name: Run Tests
+      env:
+        LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+        LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+        LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+        LANGFUSE_HOST: ${{ secrets.LANGFUSE_BASE_URL }}
       run: npm run test
 
     - name: Build
