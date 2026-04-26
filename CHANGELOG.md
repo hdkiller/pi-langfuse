@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.2.1](https://github.com/hdkiller/pi-langfuse/compare/v0.2.0...v0.2.1) (2026-04-26)
+
 ## 0.2.0 (2026-04-26)
 
 ### Features
@@ -20,4 +22,3 @@
 * **Tooling**: Integrated Biome (linting/formatting), Vitest (testing), and Husky.
 * **CI/CD**: Setup GitHub Actions with E2E integration tests.
 * **Observability**: Major improvements to trace hierarchy and assistant-turn generations.
-
