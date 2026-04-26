@@ -5,7 +5,7 @@ import {
 	canTrace,
 	getConfigWarnings,
 	resolveConfig,
-} from "./config.ts";
+} from "./config.js";
 import {
 	flushClient,
 	getClient,
@@ -13,14 +13,14 @@ import {
 	type LangfuseSpan,
 	type LangfuseTrace,
 	shutdownClient,
-} from "./langfuse-client.ts";
+} from "./langfuse-client.js";
 import {
 	EXTENSION_ID,
 	getStoredSettingsValues,
 	registerSettings,
 	type SettingsValues,
 	setSettingsValues,
-} from "./settings.ts";
+} from "./settings.js";
 
 interface PiUsage {
 	input?: number;
@@ -602,8 +602,8 @@ export default async function (pi: ExtensionAPI) {
 		if (!tool) return;
 		const config = resolveConfig(settings);
 		tool.isError = event.isError;
-		if (event.isError) {
-			promptState!.toolErrors += 1;
+		if (event.isError && promptState) {
+			promptState.toolErrors += 1;
 		}
 		const durationMs = Date.now() - tool.startedAt;
 		const output =
@@ -676,7 +676,7 @@ export default async function (pi: ExtensionAPI) {
 		const activeTurns = Array.from(promptState.activeTurns.values());
 		const turnState =
 			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
-		if (!turnState || !turnState.generation) return;
+		if (!turnState?.generation) return;
 
 		const assistantEvent = event.assistantMessageEvent as {
 			type: string;
@@ -723,7 +723,7 @@ export default async function (pi: ExtensionAPI) {
 		const activeTurns = Array.from(promptState.activeTurns.values());
 		const turnState =
 			activeTurns.length > 0 ? activeTurns[activeTurns.length - 1] : undefined;
-		if (!turnState || !turnState.generation) return;
+		if (!turnState?.generation) return;
 
 		const outputText = extractTextFromContent(message.content).trim();
 		const finalOutput =
@@ -856,7 +856,7 @@ export default async function (pi: ExtensionAPI) {
 					requests: turnState.requests,
 				},
 			});
-		} catch (e) {
+		} catch (_e) {
 			// ignore
 		}
 	});

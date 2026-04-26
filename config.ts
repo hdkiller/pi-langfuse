@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_SETTINGS, type SettingsValues } from "./settings.ts";
+import { DEFAULT_SETTINGS, type SettingsValues } from "./settings.js";
 
 export interface Config {
 	publicKey: string;
