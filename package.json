@@ -1,10 +1,17 @@
 {
 	"name": "@hdkiller/pi-langfuse",
 	"version": "0.1.0",
-	"description": "Langfuse observability extension for Pi coding agent with prompt/turn/tool tracing, token usage, costs, and session context",
+	"description": "Production-grade Langfuse observability for Pi. Tracks prompts, turns, tools, and streaming assistant responses with native trace hierarchies, token usage, and cost monitoring.",
 	"type": "module",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
+	"files": [
+		"dist",
+		"index.ts",
+		"langfuse-client.ts",
+		"config.ts",
+		"settings.ts"
+	],
 	"scripts": {
 		"build": "tsc",
 		"check": "biome check --write .",
@@ -12,7 +19,8 @@
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"prepare": "husky"
+		"prepare": "husky",
+		"release": "release-it"
 	},
 	"lint-staged": {
 		"*.{js,ts,json}": "biome check --write"
@@ -45,6 +53,7 @@
 		"@types/node": "^20.0.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.4.0",
+		"release-it": "^18.1.1",
 		"tsx": "^4.20.3",
 		"typescript": "^5.9.2",
 		"vitest": "^2.0.0"
