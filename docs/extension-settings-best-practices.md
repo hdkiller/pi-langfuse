@@ -27,11 +27,11 @@ Also listen for `pi-extension-settings:ready` and re-register then.
 
 Use one stable id, such as:
 
-- `pi-langfuse-extension`
+- `pi-langfuse`
 
 This id is the namespace used in `~/.pi/agent/settings.json` under:
 
-- `extensions:settings.pi-langfuse-extension`
+- `extensions:settings.pi-langfuse`
 
 Changing it later will orphan previously saved settings.
 

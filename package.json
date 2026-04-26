@@ -1,29 +1,49 @@
 {
-  "name": "@ravan08/pi-langfuse",
-  "version": "1.0.1",
-  "description": "Langfuse observability extension for Pi coding agent - tracks tokens, cost, model, and tool calls",
-  "type": "module",
-  "main": "index.ts",
-  "keywords": "[\"pi-package\",\"langfuse\",\"observability\",\"tracing\",\"monitoring\",\"pi-coding-agent\",\"extension\"]",
-  "pi": {
-    "extensions": [
-      "./index.ts"
-    ],
-    "image": "https://raw.githubusercontent.com/saravananravi08/pi-langfuse-extension/main/screenshot.png"
-  },
-  "dependencies": {
-    "langfuse": "^3.0.0"
-  },
-  "peerDependencies": {
-    "@axnic/pi-extension-settings": "^0.2.0",
-    "@mariozechner/pi-coding-agent": "*"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/saravananravi08/pi-langfuse-extension.git"
-  },
-  "license": "MIT",
-  "engines": {
-    "node": ">=18"
-  }
+	"name": "@hdkiller/pi-langfuse",
+	"version": "0.1.0",
+	"description": "Langfuse observability extension for Pi coding agent with prompt/turn/tool tracing, token usage, costs, and session context",
+	"type": "module",
+	"main": "index.ts",
+	"keywords": [
+		"pi-package",
+		"langfuse",
+		"observability",
+		"tracing",
+		"monitoring",
+		"pi-coding-agent",
+		"extension"
+	],
+	"author": "hdkiller",
+	"contributors": [
+		"Saravanan Ravi (@saravananravi08)",
+		"Maksym Prokopov"
+	],
+	"pi": {
+		"extensions": [
+			"./index.ts"
+		],
+		"image": "https://raw.githubusercontent.com/hdkiller/pi-langfuse/main/screenshot.png"
+	},
+	"dependencies": {
+		"langfuse": "^3.0.0"
+	},
+	"peerDependencies": {
+		"@axnic/pi-extension-settings": "^0.2.0",
+		"@mariozechner/pi-coding-agent": "*"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/hdkiller/pi-langfuse.git"
+	},
+	"homepage": "https://github.com/hdkiller/pi-langfuse#readme",
+	"bugs": {
+		"url": "https://github.com/hdkiller/pi-langfuse/issues"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">=18"
+	}
 }

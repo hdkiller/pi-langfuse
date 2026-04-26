@@ -2,62 +2,107 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Config } from "./config.ts";
 
+type LangfuseMetadata = Record<string, unknown>;
+
+type TraceUpdateBody = {
+	name?: string;
+	metadata?: LangfuseMetadata;
+	output?: unknown;
+	input?: unknown;
+	sessionId?: string;
+	userId?: string;
+	tags?: string[];
+};
+
+type ObservationEndBody = {
+	metadata?: LangfuseMetadata;
+	isError?: boolean;
+	output?: unknown;
+	usage?: unknown;
+	usageDetails?: Record<string, number>;
+	costDetails?: Record<string, number>;
+	statusMessage?: string;
+};
+
+export interface LangfuseTrace {
+	id: string;
+	update(body?: TraceUpdateBody): void;
+}
+
 export interface LangfuseSpan {
 	id: string;
-	end(body?: {
-		metadata?: Record<string, unknown>;
-		isError?: boolean;
+	update?(body?: {
+		metadata?: LangfuseMetadata;
+		input?: unknown;
 		output?: unknown;
+		statusMessage?: string;
 	}): void;
+	end(body?: ObservationEndBody): void;
 }
 
 export interface LangfuseGeneration {
 	id: string;
-	end(body?: {
-		metadata?: Record<string, unknown>;
+	update?(body?: {
+		metadata?: LangfuseMetadata;
 		usage?: unknown;
+		usageDetails?: Record<string, number>;
 		output?: unknown;
-		costDetails?: unknown;
+		costDetails?: Record<string, number>;
+		statusMessage?: string;
 	}): void;
+	end(body?: ObservationEndBody): void;
 }
 
 export interface LangfuseClient {
 	trace(body?: {
 		name: string;
-		metadata?: Record<string, unknown>;
+		metadata?: LangfuseMetadata;
 		input?: unknown;
 		output?: unknown;
 		sessionId?: string;
-	}): {
-		id: string;
-		update(body?: {
-			metadata?: Record<string, unknown>;
-			output?: unknown;
-			input?: unknown;
-		}): void;
-	};
+		userId?: string;
+		tags?: string[];
+	}): LangfuseTrace;
 	span(body: {
 		name: string;
 		traceId: string;
-		metadata?: Record<string, unknown>;
+		parentObservationId?: string;
+		metadata?: LangfuseMetadata;
 		input?: unknown;
+		output?: unknown;
 	}): LangfuseSpan;
 	generation(body: {
 		name: string;
 		traceId: string;
-		metadata?: Record<string, unknown>;
+		parentObservationId?: string;
+		metadata?: LangfuseMetadata;
 		input?: unknown;
 		output?: unknown;
 		usage?: unknown;
+		usageDetails?: Record<string, number>;
 		model?: string;
-		costDetails?: unknown;
+		costDetails?: Record<string, number>;
 	}): LangfuseGeneration;
-	score(body: { name: string; value: number; traceId?: string }): void;
+	score(body: {
+		name: string;
+		value: number;
+		traceId?: string;
+		observationId?: string;
+		sessionId?: string;
+		comment?: string;
+	}): void;
+	flushAsync?(): Promise<void>;
 	shutdownAsync(): Promise<void>;
 }
 
 let client: LangfuseClient | null = null;
 let clientConfigKey = "";
+
+export async function flushClient() {
+	if (client?.flushAsync) {
+		await client.flushAsync();
+	}
+}
 
 export async function shutdownClient() {
 	if (client) {

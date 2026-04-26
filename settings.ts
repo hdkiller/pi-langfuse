@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-export const EXTENSION_ID = "pi-langfuse-extension";
+export const EXTENSION_ID = "pi-langfuse";
 const SETTINGS_FILE = join(homedir(), ".pi", "agent", "settings.json");
 const EXTENSIONS_SETTINGS_KEY = "extensions:settings";
 

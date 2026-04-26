@@ -48,6 +48,7 @@ export function resolveConfig(settings: Partial<SettingsValues>): Config {
 			settings["base-url"] ||
 			fileConfig.host ||
 			process.env.LANGFUSE_BASE_URL ||
+			process.env.LANGFUSE_HOST ||
 			DEFAULT_SETTINGS["base-url"],
 	};
 }
