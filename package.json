@@ -15,6 +15,7 @@
     "langfuse": "^3.0.0"
   },
   "peerDependencies": {
+    "@axnic/pi-extension-settings": "^0.2.0",
     "@mariozechner/pi-coding-agent": "*"
   },
   "repository": {

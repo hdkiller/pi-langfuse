@@ -1,365 +1,349 @@
-/**
- * Langfuse Observability Extension for Pi Coding Agent
- * 
- * Sends traces to Langfuse for monitoring tokens, costs, latency, and tool calls.
- * Uses dynamic import to load the langfuse SDK properly.
- */
-
-import { readFileSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-
-// ============================================
-// Configuration
-// ============================================
-
-interface Config {
-  publicKey: string;
-  secretKey: string;
-  host: string;
-}
-
-function loadConfig(): Config {
-  const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "config.json");
-  
-  if (existsSync(configPath)) {
-    try {
-      const content = readFileSync(configPath, "utf-8");
-      const config = JSON.parse(content) as Config;
-      if (config.publicKey && config.secretKey) {
-        return {
-          publicKey: config.publicKey,
-          secretKey: config.secretKey,
-          host: config.host || "https://cloud.langfuse.com",
-        };
-      }
-    } catch (e) {
-      console.warn("📊 Langfuse: Failed to load config.json", e);
-    }
-  }
-
-  return {
-    publicKey: "",
-    secretKey: "",
-    host: "https://cloud.langfuse.com",
-  };
-}
-
-const config = loadConfig();
-
-// ============================================
-// Langfuse Client (lazy-loaded via dynamic import)
-// ============================================
-
-interface LangfuseSpan {
-  id: string;
-  end(body?: { metadata?: Record<string, unknown>; isError?: boolean; output?: unknown }): void;
-}
-
-interface LangfuseGeneration {
-  id: string;
-  end(body?: { metadata?: Record<string, unknown>; usage?: unknown; output?: unknown }): void;
-}
-
-interface LangfuseClient {
-  trace(body?: { name: string; metadata?: Record<string, unknown>; input?: unknown; output?: unknown; sessionId?: string }): {
-    id: string;
-    update(body?: { metadata?: Record<string, unknown>; output?: unknown; input?: unknown }): void;
-  };
-  span(body: { name: string; traceId: string; metadata?: Record<string, unknown>; input?: unknown }): LangfuseSpan;
-  generation(body: { name: string; traceId: string; metadata?: Record<string, unknown>; input?: unknown; output?: unknown; usage?: unknown }): LangfuseGeneration;
-  score(body: { name: string; value: number; traceId?: string }): void;
-  shutdownAsync(): Promise<void>;
-}
-
-let client: LangfuseClient | null = null;
-
-async function getClient(): Promise<LangfuseClient> {
-  if (!client) {
-    const extDir = resolve(dirname(fileURLToPath(import.meta.url)));
-    const lib = await import(`${extDir}/node_modules/langfuse/lib/index.mjs`) as {
-      Langfuse: new (options: { publicKey: string; secretKey?: string; baseUrl?: string }) => LangfuseClient;
-    };
-    client = new lib.Langfuse({
-      publicKey: config.publicKey,
-      secretKey: config.secretKey,
-      baseUrl: config.host,
-    });
-  }
-  return client;
-}
-
-// ============================================
-// State
-// ============================================
+import { canTrace, resolveConfig } from "./config.ts";
+import {
+	getClient,
+	type LangfuseSpan,
+	shutdownClient,
+} from "./langfuse-client.ts";
+import {
+	EXTENSION_ID,
+	getStoredSettingsValues,
+	registerSettings,
+	type SettingsValues,
+	setSettingsValues,
+} from "./settings.ts";
 
 interface TraceData {
-  id: string;
-  update?: (body?: { metadata?: Record<string, unknown>; output?: unknown; input?: unknown }) => void;
+	id: string;
+	update?: (body?: {
+		metadata?: Record<string, unknown>;
+		output?: unknown;
+		input?: unknown;
+	}) => void;
 }
 
 let currentTrace: TraceData | null = null;
-let currentUserPrompt: string = "";
-let currentSessionId: string = "";
-let currentModel: string = "";
-let currentProvider: string = "";
+let currentUserPrompt = "";
+let currentSessionId = "";
+let currentModel = "";
+let currentProvider = "";
 const activeSpans: Map<string, LangfuseSpan> = new Map();
 
-// ============================================
-// Extension
-// ============================================
+function getLiveSettingsView(
+	settings: Partial<SettingsValues>,
+): SettingsValues {
+	const config = resolveConfig(settings);
+	return {
+		enabled: config.enabled,
+		"public-key": config.publicKey,
+		"secret-key": config.secretKey,
+		"base-url": config.host,
+	};
+}
+
+function announceConfigState(settings: Partial<SettingsValues>) {
+	const config = resolveConfig(settings);
+	if (!config.enabled) {
+		console.log("📊 Langfuse: Tracing disabled in extension settings");
+		return;
+	}
+	if (!config.publicKey || !config.secretKey) {
+		console.log(
+			"📊 Langfuse: Configure public/secret key in settings, config.json, or LANGFUSE_* env vars to enable",
+		);
+		return;
+	}
+	console.log("📊 Langfuse: Tracing enabled →", config.host);
+}
 
 export default async function (pi: ExtensionAPI) {
-  if (!config.publicKey || !config.secretKey) {
-    console.log("📊 Langfuse: Set publicKey and secretKey in config.json to enable");
-    return;
-  }
+	let settings = getStoredSettingsValues(pi);
 
-  console.log("📊 Langfuse: Tracing enabled →", config.host);
+	const refreshConfig = async () => {
+		settings = getStoredSettingsValues(pi);
+		registerSettings(pi, getLiveSettingsView(settings));
+		await shutdownClient();
+		announceConfigState(settings);
+	};
 
-  // Capture session ID on session start
-  pi.on("session_start", async (_event, ctx) => {
-    const sessionFile = ctx.sessionManager.getSessionFile();
-    if (sessionFile) {
-      // Extract session ID from file path (format: 2026-04-25T13-23-54-756Z_<uuid>.jsonl)
-      const filename = sessionFile.split('/').pop() || '';
-      currentSessionId = filename.replace('.jsonl', '');
-    }
-  });
+	pi.events.on("pi-extension-settings:ready", () => {
+		registerSettings(pi, getLiveSettingsView(settings));
+	});
+	registerSettings(pi, getLiveSettingsView(settings));
 
-  // Capture model info on model select
-  pi.on("model_select", async (event, ctx) => {
-    currentModel = event.model?.id || '';
-    currentProvider = event.model?.provider || '';
-  });
+	pi.events.on(`pi-extension-settings:${EXTENSION_ID}:changed`, () => {
+		void refreshConfig();
+	});
+	pi.events.on(`extension:settings:changed:${EXTENSION_ID}`, () => {
+		void refreshConfig();
+	});
 
-  // Use before_agent_start to capture user prompt and create trace
-  pi.on("before_agent_start", async (event, ctx) => {
-    try {
-      const lf = await getClient();
-      const cwd = event.systemPromptOptions?.cwd || process.cwd();
-      currentUserPrompt = event.prompt;
-      
-      // Fallback to ctx.model if not captured via model_select
-      if (!currentModel && ctx.model) {
-        currentModel = ctx.model.id || '';
-        currentProvider = ctx.model.provider || '';
-      }
-      
-      // Create trace with user input and session ID
-      currentTrace = lf.trace({ 
-        name: "pi-agent", 
-        input: event.prompt,
-        metadata: { 
-          cwd,
-          model: currentModel,
-          provider: currentProvider
-        },
-        sessionId: currentSessionId || undefined
-      });
-    } catch (e) {
-      console.warn("📊 Langfuse: Failed to create trace", e);
-    }
-  });
+	pi.registerCommand("langfuse:toggle", {
+		description:
+			"Toggle Langfuse tracing or force on/off with /langfuse:toggle [on|off]",
+		handler: async (args, ctx) => {
+			const current = resolveConfig(settings);
+			const nextEnabled =
+				args.trim() === "on"
+					? true
+					: args.trim() === "off"
+						? false
+						: !current.enabled;
 
-  pi.on("agent_end", async (event) => {
-    if (currentTrace) {
-      // Get final response/output
-      const eventData = event as unknown as {
-        messages?: Array<{
-          role: string;
-          content: Array<{ type: string; text?: string; thinking?: string }>;
-        }>;
-      };
-      const messages = eventData.messages || [];
-      const lastAssistant = messages.filter(m => m.role === "assistant").pop();
-      
-      // Extract text from content array (filter out thinking blocks)
-      let output: string | undefined = undefined;
-      if (lastAssistant?.content) {
-        output = lastAssistant.content
-          .filter(c => c.type === "text" && c.text)
-          .map(c => c.text)
-          .join("\n");
-        if (output.length === 0) output = undefined;
-      }
-      
-      currentTrace.update({ 
-        output: output || undefined,
-        metadata: { 
-          completed: true, 
-          totalTools: activeSpans.size,
-          model: currentModel,
-          provider: currentProvider
-        }
-      });
-      currentTrace = null;
-    }
-    activeSpans.clear();
-    currentUserPrompt = "";
-    if (client) {
-      await client.shutdownAsync();
-      client = null;
-    }
-  });
+			setSettingsValues({ enabled: nextEnabled });
+			await refreshConfig();
 
-  // Use tool_call instead of tool_execution_start - it has input
-  pi.on("tool_call", async (event) => {
-    if (!currentTrace) return;
+			const next = resolveConfig(settings);
+			const status = next.enabled ? `enabled → ${next.host}` : "disabled";
+			ctx.ui?.notify?.(`Langfuse tracing ${status}`, "info");
+		},
+	});
 
-    try {
-      const lf = await getClient();
-      
-      // Format input nicely
-      let inputStr = "";
-      if (event.input) {
-        inputStr = JSON.stringify(event.input, null, 2);
-        if (inputStr.length > 1000) {
-          inputStr = inputStr.slice(0, 1000) + "...";
-        }
-      }
-      
-      const span = lf.span({
-        name: `tool:${event.toolName}`,
-        traceId: currentTrace.id,
-        input: inputStr,
-        metadata: { tool: event.toolName }
-      });
-      activeSpans.set(event.toolCallId, span);
-    } catch (e) {
-      console.warn("📊 Langfuse: Failed to create span", e);
-    }
-  });
+	await shutdownClient();
+	announceConfigState(settings);
 
-  pi.on("tool_result", async (event) => {
-    const span = activeSpans.get(event.toolCallId);
-    if (span) {
-      // Format output nicely
-      let outputStr = "";
-      if (event.content && event.content.length > 0) {
-        // Extract text from content array
-        for (const item of event.content) {
-          if (item.type === "text" && item.text) {
-            outputStr += item.text;
-          }
-        }
-        if (outputStr.length > 2000) {
-          outputStr = outputStr.slice(0, 2000) + "...";
-        }
-      }
-      
-      span.end({ 
-        isError: event.isError,
-        output: outputStr || undefined
-      });
-      activeSpans.delete(event.toolCallId);
-    }
-  });
+	pi.on("session_start", async (_event, ctx) => {
+		const sessionFile = ctx.sessionManager.getSessionFile();
+		if (sessionFile) {
+			const filename = sessionFile.split("/").pop() || "";
+			currentSessionId = filename.replace(".jsonl", "");
+		}
+	});
 
-  pi.on("turn_end", async (event) => {
-    if (!currentTrace) return;
+	pi.on("model_select", async (event, _ctx) => {
+		currentModel = event.model?.id || "";
+		currentProvider = event.model?.provider || "";
+	});
 
-    const eventData = event as unknown as {
-      message?: {
-        role: string;
-        content: Array<{ type: string; text?: string }>;
-        model?: string;
-        cost?: { input: number; output: number; total: number };
-        usage?: {
-          input: number;
-          output: number;
-          cacheRead: number;
-          cacheWrite: number;
-          totalTokens: number;
-          cost?: { input: number; output: number; total: number };
-        };
-      };
-      toolResults?: Array<{ toolName: string; toolCallId: string }>;
-    };
+	pi.on("before_agent_start", async (event, ctx) => {
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
 
-    const message = eventData.message;
-    if (!message || message.role !== "assistant") return;
+		try {
+			const lf = await getClient(config);
+			const eventData = event as typeof event & {
+				systemPromptOptions?: { cwd?: string };
+			};
+			const cwd = eventData.systemPromptOptions?.cwd || process.cwd();
+			currentUserPrompt = event.prompt;
 
-    const usage = message.usage;
-    const modelId = message.model || currentModel;
-    const provider = currentProvider;
-    // Cost is inside usage.cost, not message.cost
-    const cost = usage?.cost;
+			if (!currentModel && ctx.model) {
+				currentModel = ctx.model.id || "";
+				currentProvider = ctx.model.provider || "";
+			}
 
-    if (usage) {
-      try {
-        const lf = await getClient();
-        
-        // Extract output text
-        let outputText = "";
-        if (message.content) {
-          outputText = message.content
-            .filter(c => c.type === "text" && c.text)
-            .map(c => c.text)
-            .join("\n");
-        }
-        
-        // Create generation for the LLM response with model info
-        const gen = lf.generation({
-          name: "llm-response",
-          traceId: currentTrace.id,
-          input: currentUserPrompt.slice(0, 500),
-          output: outputText.slice(0, 1000),
-          model: modelId,
-          metadata: {
-            provider: provider,
-            inputTokens: usage.input || 0,
-            outputTokens: usage.output || 0,
-            cachedTokens: usage.cacheRead || 0,
-          },
-          usage: {
-            input: usage.input || 0,
-            output: usage.output || 0,
-            total: usage.totalTokens || (usage.input || 0) + (usage.output || 0)
-          },
-          costDetails: cost ? { total: cost.total, input: cost.input, output: cost.output } : undefined
-        });
-        gen.end({ 
-          costDetails: cost ? { total: cost.total, input: cost.input, output: cost.output } : undefined,
-          usage: {
-            input: usage.input || 0,
-            output: usage.output || 0,
-            total: usage.totalTokens || (usage.input || 0) + (usage.output || 0)
-          }
-        });
-      } catch (e) {
-        console.warn("📊 Langfuse: Failed to create generation", e);
-      }
+			currentTrace = lf.trace({
+				name: "pi-agent",
+				input: event.prompt,
+				metadata: {
+					cwd,
+					model: currentModel,
+					provider: currentProvider,
+				},
+				sessionId: currentSessionId || undefined,
+			});
+		} catch (e) {
+			console.warn("📊 Langfuse: Failed to create trace", e);
+		}
+	});
 
-      // Record token scores
-      if (usage.input) {
-        const lf = await getClient();
-        lf.score({ name: "input_tokens", value: usage.input, traceId: currentTrace.id });
-      }
-      if (usage.output) {
-        const lf = await getClient();
-        lf.score({ name: "output_tokens", value: usage.output, traceId: currentTrace.id });
-      }
-      
-      // Record cost if available
-      if (cost?.total) {
-        const lf = await getClient();
-        lf.score({ name: "total_cost", value: cost.total, traceId: currentTrace.id });
-      }
-    }
-  });
+	pi.on("agent_end", async (event) => {
+		if (currentTrace) {
+			const eventData = event as unknown as {
+				messages?: Array<{
+					role: string;
+					content: Array<{ type: string; text?: string; thinking?: string }>;
+				}>;
+			};
+			const messages = eventData.messages || [];
+			const lastAssistant = messages
+				.filter((m) => m.role === "assistant")
+				.pop();
 
-  pi.on("session_shutdown", async () => {
-    if (currentTrace) {
-      if (currentTrace.update) {
-        currentTrace.update({ metadata: { completed: true } });
-      }
-      currentTrace = null;
-    }
-    if (client) {
-      await client.shutdownAsync();
-      client = null;
-    }
-  });
+			let output: string | undefined;
+			if (lastAssistant?.content) {
+				output = lastAssistant.content
+					.filter((c) => c.type === "text" && c.text)
+					.map((c) => c.text)
+					.join("\n");
+				if (output.length === 0) output = undefined;
+			}
+
+			currentTrace.update?.({
+				output: output || undefined,
+				metadata: {
+					completed: true,
+					totalTools: activeSpans.size,
+					model: currentModel,
+					provider: currentProvider,
+				},
+			});
+			currentTrace = null;
+		}
+		activeSpans.clear();
+		currentUserPrompt = "";
+		await shutdownClient();
+	});
+
+	pi.on("tool_call", async (event) => {
+		if (!currentTrace) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		try {
+			const lf = await getClient(config);
+			let inputStr = "";
+			if (event.input) {
+				inputStr = JSON.stringify(event.input, null, 2);
+				if (inputStr.length > 1000) {
+					inputStr = inputStr.slice(0, 1000) + "...";
+				}
+			}
+
+			const span = lf.span({
+				name: `tool:${event.toolName}`,
+				traceId: currentTrace.id,
+				input: inputStr,
+				metadata: { tool: event.toolName },
+			});
+			activeSpans.set(event.toolCallId, span);
+		} catch (e) {
+			console.warn("📊 Langfuse: Failed to create span", e);
+		}
+	});
+
+	pi.on("tool_result", async (event) => {
+		const span = activeSpans.get(event.toolCallId);
+		if (!span) return;
+
+		let outputStr = "";
+		if (event.content && event.content.length > 0) {
+			for (const item of event.content) {
+				if (item.type === "text" && item.text) {
+					outputStr += item.text;
+				}
+			}
+			if (outputStr.length > 2000) {
+				outputStr = outputStr.slice(0, 2000) + "...";
+			}
+		}
+
+		span.end({
+			isError: event.isError,
+			output: outputStr || undefined,
+		});
+		activeSpans.delete(event.toolCallId);
+	});
+
+	pi.on("turn_end", async (event) => {
+		if (!currentTrace) return;
+		const config = resolveConfig(settings);
+		if (!canTrace(config)) return;
+
+		const eventData = event as unknown as {
+			message?: {
+				role: string;
+				content: Array<{ type: string; text?: string }>;
+				model?: string;
+				usage?: {
+					input: number;
+					output: number;
+					cacheRead: number;
+					cacheWrite: number;
+					totalTokens: number;
+					cost?: { input: number; output: number; total: number };
+				};
+			};
+		};
+
+		const message = eventData.message;
+		if (!message || message.role !== "assistant") return;
+
+		const usage = message.usage;
+		const modelId = message.model || currentModel;
+		const provider = currentProvider;
+		const cost = usage?.cost;
+
+		if (usage) {
+			try {
+				const lf = await getClient(config);
+				let outputText = "";
+				if (message.content) {
+					outputText = message.content
+						.filter((c) => c.type === "text" && c.text)
+						.map((c) => c.text)
+						.join("\n");
+				}
+
+				const gen = lf.generation({
+					name: "llm-response",
+					traceId: currentTrace.id,
+					input: currentUserPrompt.slice(0, 500),
+					output: outputText.slice(0, 1000),
+					model: modelId,
+					metadata: {
+						provider,
+						inputTokens: usage.input || 0,
+						outputTokens: usage.output || 0,
+						cachedTokens: usage.cacheRead || 0,
+					},
+					usage: {
+						input: usage.input || 0,
+						output: usage.output || 0,
+						total:
+							usage.totalTokens || (usage.input || 0) + (usage.output || 0),
+					},
+					costDetails: cost
+						? { total: cost.total, input: cost.input, output: cost.output }
+						: undefined,
+				});
+				gen.end({
+					costDetails: cost
+						? { total: cost.total, input: cost.input, output: cost.output }
+						: undefined,
+					usage: {
+						input: usage.input || 0,
+						output: usage.output || 0,
+						total:
+							usage.totalTokens || (usage.input || 0) + (usage.output || 0),
+					},
+				});
+			} catch (e) {
+				console.warn("📊 Langfuse: Failed to create generation", e);
+			}
+
+			if (usage.input) {
+				const lf = await getClient(config);
+				lf.score({
+					name: "input_tokens",
+					value: usage.input,
+					traceId: currentTrace.id,
+				});
+			}
+			if (usage.output) {
+				const lf = await getClient(config);
+				lf.score({
+					name: "output_tokens",
+					value: usage.output,
+					traceId: currentTrace.id,
+				});
+			}
+			if (cost?.total) {
+				const lf = await getClient(config);
+				lf.score({
+					name: "total_cost",
+					value: cost.total,
+					traceId: currentTrace.id,
+				});
+			}
+		}
+	});
+
+	pi.on("session_shutdown", async () => {
+		if (currentTrace) {
+			currentTrace.update?.({ metadata: { completed: true } });
+			currentTrace = null;
+		}
+		await shutdownClient();
+	});
 }
