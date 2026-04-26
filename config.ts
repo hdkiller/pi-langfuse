@@ -33,7 +33,7 @@ export function resolveConfig(settings: Partial<SettingsValues>): Config {
 	const fileConfig = loadConfigFile();
 
 	return {
-		enabled: settings.enabled ?? DEFAULT_SETTINGS.enabled,
+		enabled: settings.enabled ?? fileConfig.enabled ?? DEFAULT_SETTINGS.enabled,
 		publicKey:
 			settings["public-key"] ||
 			fileConfig.publicKey ||

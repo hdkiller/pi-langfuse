@@ -33,11 +33,14 @@ Create `config.json` in the extension directory:
 
 ```json
 {
+  "enabled": false,
   "publicKey": "pk-lf-xxxx",
   "secretKey": "sk-lf-xxxx",
   "host": "https://cloud.langfuse.com"
 }
 ```
+
+Set `enabled` to `false` if you want Pi to start without tracing, then enable it later in the same session with `/langfuse:toggle`.
 
 If `config.json` does not exist, the extension falls back to these environment variables:
 
@@ -65,6 +68,8 @@ Then configure these fields under `pi-langfuse-extension`:
 - `public-key`
 - `secret-key`
 - `base-url`
+
+The `enabled` value in `/extensions:settings` overrides `config.json` for future sessions until you change it again.
 
 Empty values in the panel show the live effective fallback currently resolved from `config.json`, `LANGFUSE_*`, or built-in defaults.
 

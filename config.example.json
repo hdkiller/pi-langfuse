@@ -1,5 +1,6 @@
 {
-  "publicKey": "pk-lf-YOUR-KEY-HERE",
-  "secretKey": "sk-lf-YOUR-KEY-HERE",
-  "host": "https://cloud.langfuse.com"
+	"enabled": false,
+	"publicKey": "pk-lf-YOUR-KEY-HERE",
+	"secretKey": "sk-lf-YOUR-KEY-HERE",
+	"host": "https://cloud.langfuse.com"
 }
