@@ -23,7 +23,8 @@
 		"release": "release-it"
 	},
 	"lint-staged": {
-		"*.{js,ts,json}": "biome check --write"
+		"src/**/*.{js,ts,json}": "biome check --write",
+		"test/**/*.{js,ts,json}": "biome check --write"
 	},
 	"keywords": [
 		"pi-package",
@@ -41,7 +42,7 @@
 	],
 	"pi": {
 		"extensions": [
-			"./index.ts"
+			"./src/index.ts"
 		],
 		"image": "https://raw.githubusercontent.com/hdkiller/pi-langfuse/main/docs/screenshot.jpg"
 	},

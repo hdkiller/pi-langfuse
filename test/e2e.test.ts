@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { resolveConfig } from "./config.js";
-import { flushClient, getClient, shutdownClient } from "./langfuse-client.js";
+import { resolveConfig } from "../src/config.js";
+import {
+	flushClient,
+	getClient,
+	shutdownClient,
+} from "../src/langfuse-client.js";
 
 const skipE2E =
 	!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY;

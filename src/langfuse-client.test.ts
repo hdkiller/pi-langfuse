@@ -10,7 +10,7 @@ vi.mock("./langfuse-client.js", async (importOriginal) => {
 	};
 });
 
-const mockConfig: Config = {
+const _mockConfig: Config = {
 	enabled: true,
 	publicKey: "pk",
 	secretKey: "sk",

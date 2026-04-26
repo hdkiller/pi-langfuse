@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, it, vi } from "vitest";
 import registerExtension from "./index.js";
 
 describe("index (extension entry)", () => {

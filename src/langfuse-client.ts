@@ -133,9 +133,10 @@ export async function getClient(config: Config): Promise<LangfuseClient> {
 	}
 
 	if (!client) {
-		const extDir = resolve(dirname(fileURLToPath(import.meta.url)));
+		const srcDir = resolve(dirname(fileURLToPath(import.meta.url)));
+		const projectRoot = resolve(srcDir, "..");
 		const lib = (await import(
-			`${extDir}/node_modules/langfuse/lib/index.mjs`
+			`${projectRoot}/node_modules/langfuse/lib/index.mjs`
 		)) as {
 			Langfuse: new (options: {
 				publicKey: string;
