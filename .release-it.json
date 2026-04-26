@@ -6,9 +6,7 @@
 		"commitMessage": "chore: release v${version}"
 	},
 	"github": {
-		"release": true,
-		"releaseName": "v${version}",
-		"skipChecks": true
+		"release": false
 	},
 	"npm": {
 		"publish": true
@@ -23,6 +21,7 @@
 	},
 	"hooks": {
 		"before:init": ["npm run typecheck", "npm run test"],
-		"after:bump": "npm run build"
+		"after:bump": "npm run build",
+		"after:release": "gh release create v${version} --repo hdkiller/pi-langfuse --title \"v${version}\" --notes \"$(cat CHANGELOG.md)\""
 	}
 }
