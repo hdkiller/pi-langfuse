@@ -608,7 +608,6 @@ export default async function (pi: ExtensionAPI) {
 						value: usage.input,
 						traceId: promptState.trace.id,
 						observationId: generation.id,
-						sessionId: currentSessionId || undefined,
 					});
 				}
 				if (usage?.output) {
@@ -617,7 +616,6 @@ export default async function (pi: ExtensionAPI) {
 						value: usage.output,
 						traceId: promptState.trace.id,
 						observationId: generation.id,
-						sessionId: currentSessionId || undefined,
 					});
 				}
 				if (typeof usage?.cost?.total === "number") {
@@ -626,7 +624,6 @@ export default async function (pi: ExtensionAPI) {
 						value: usage.cost.total,
 						traceId: promptState.trace.id,
 						observationId: generation.id,
-						sessionId: currentSessionId || undefined,
 					});
 				}
 			} catch (e) {
