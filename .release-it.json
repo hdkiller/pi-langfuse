@@ -1,7 +1,11 @@
 {
+	"git": {
+		"pushRepo": "origin"
+	},
 	"github": {
 		"release": true,
-		"releaseName": "v${version}"
+		"releaseName": "v${version}",
+		"tokenRef": "GH_TOKEN"
 	},
 	"npm": {
 		"publish": true
